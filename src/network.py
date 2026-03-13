@@ -15,6 +15,8 @@ def get_network_latency(overlay_network: str) -> dict:
         return _get_tailscale_latency()
     elif overlay_network == "netbird":
         return _get_netbird_latency()
+    elif overlay_network == "zerotier":
+        return _get_zerotier_latency()
     else:
         raise NotImplementedError(f"Overlay network '{overlay_network}' is not supported yet.")
 
@@ -37,6 +39,17 @@ def get_node_ip(overlay_network: str) -> str:
             for line in result.splitlines():
                 if "NetBird IP:" in line:
                     return line.split("NetBird IP:")[1].strip().split("/")[0]
+        except Exception:
+            pass
+    elif overlay_network == "zerotier":
+        try:
+            result = subprocess.check_output(['zerotier-cli', 'listnetworks']).decode('utf-8')
+            for line in result.splitlines():
+                if "OK" in line:
+                    parts = line.split()
+                    for p in parts:
+                        if "/" in p and p.count(".") == 3:
+                            return p.split("/")[0]
         except Exception:
             pass
     return "127.0.0.1"
@@ -84,6 +97,39 @@ def ping_ip(ip):
         except Exception:
             pass
         return ip, None
+
+def _get_zerotier_latency() -> dict:
+    """
+    Internal helper to profile latencies for ZeroTier peers.
+    """
+    latency_map = {}
+
+    try:
+        result = subprocess.run(['zerotier-cli', 'listpeers'], capture_output=True, text=True, check=True)
+    except Exception as e:
+        print(f"Error running zerotier-cli listpeers: {e}")
+        return latency_map
+
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[0] == "200" and parts[1] == "listpeers":
+            ztaddr = parts[2]
+            lat_str = parts[4]
+            try:
+                lat = float(lat_str)
+                if lat > 0.0:
+                    latency_map[ztaddr] = lat
+            except ValueError:
+                for p in parts[3:]:
+                    try:
+                        lat = float(p)
+                        if lat > 0.0 and "." not in p and p != "-": # Latency is usually an integer in ms
+                            latency_map[ztaddr] = lat
+                            break
+                    except ValueError:
+                        pass
+
+    return latency_map
 
 def _get_netbird_latency() -> dict:
     """

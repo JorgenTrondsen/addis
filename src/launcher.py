@@ -293,7 +293,7 @@ def worker_mode(args):
 
     print("[Worker] Connected! Waiting for overlay network configuration...")
     config_msg = recv_msg(sock)
-    overlay_network = config_msg.get("overlay_network", "tailscale")
+    overlay_network = config_msg.get("overlay_network")
 
     print(f"[Worker] Profiling network using {overlay_network}...")
     latency_map = get_network_latency(overlay_network)
