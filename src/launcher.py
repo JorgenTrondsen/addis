@@ -79,7 +79,8 @@ def run_sglang_subprocess(role, args, assigned_rank, nnodes, pp_size, dist_init_
         "--node-rank", str(assigned_rank),
         "--dist-init-addr", dist_init_addr,
         "--pp-size", str(pp_size),
-        "--mem-fraction-static", "0.8"
+        "--mem-fraction-static", "0.8",
+        "--pp-async-batch-depth", "2",
     ]
 
     if role == 'master':
