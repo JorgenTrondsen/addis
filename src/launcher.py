@@ -63,8 +63,8 @@ def run_sglang_subprocess(role, args, assigned_rank, nnodes, pp_size, dist_init_
         pp_size (int): Pipeline parallel size.
         dist_init_addr (str): Distributed initialization address (IP:PORT).
     """
-    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sglang', 'python', 'sglang', 'launch_server.py')
-    venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sglang', 'venv', 'bin', 'python')
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'python', 'sglang', 'launch_server.py')
+    venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'venv', 'bin', 'python')
 
     if os.path.exists(venv_python):
         python_exec = venv_python
@@ -79,8 +79,8 @@ def run_sglang_subprocess(role, args, assigned_rank, nnodes, pp_size, dist_init_
         "--node-rank", str(assigned_rank),
         "--dist-init-addr", dist_init_addr,
         "--pp-size", str(pp_size),
-        "--mem-fraction-static", str(args.gpu_memory_utilization) if hasattr(args, "gpu_memory_utilization") else str(args.get("gpu_memory_utilization", 0.8)),
-        "--pp-async-batch-depth", str(args.pp_async_batch-depth) if hasattr(args, "pp_async_batch_depth") else str(args.get("pp_async_batch_depth", 2)),
+        "--mem-fraction-static", str(args.gpu_memory_utilization) if hasattr(args, "gpu_memory_utilization") else str(args.get("gpu_memory_utilization")),
+        "--pp-async-batch-depth", str(args.pp_async_batch_depth) if hasattr(args, "pp_async_batch_depth") else str(args.get("pp_async_batch_depth")),
     ]
 
     if role == 'master':
@@ -95,11 +95,11 @@ def run_sglang_subprocess(role, args, assigned_rank, nnodes, pp_size, dist_init_
     env["NCCL_SOCKET_IFNAME"] = ifName
     env["GLOO_SOCKET_IFNAME"] = ifName
 
-    venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sglang', 'venv', 'bin')
+    venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'venv', 'bin')
     if os.path.exists(venv_bin):
         env["PATH"] = venv_bin + os.pathsep + env.get("PATH", "")
 
-    sglang_python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sglang', 'python')
+    sglang_python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'python')
     env["PYTHONPATH"] = sglang_python_dir + os.pathsep + env.get("PYTHONPATH", "")
 
     subprocess.run(cmd, env=env)
@@ -122,12 +122,12 @@ def run_vllm_subprocess(role, args, pipeline_order, node_ip, master_ip):
     env["GLOO_SOCKET_IFNAME"] = ifName
     env["VLLM_HOST_IP"] = node_ip
 
-    venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'vllm', 'venv', 'bin')
+    venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'vllm', 'venv', 'bin')
     venv_py = os.path.join(venv_bin, 'python')
 
     if os.path.exists(venv_bin) and os.path.exists(venv_py):
         env["PATH"] = venv_bin + os.pathsep + env.get("PATH", "")
-        vllm_python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'vllm')
+        vllm_python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'vllm')
         env["PYTHONPATH"] = vllm_python_dir + os.pathsep + env.get("PYTHONPATH", "")
         ray_cmd_base = [venv_py, "-m", "ray.scripts.scripts"]
         vllm_cmd_base = [venv_py, "-m", "vllm.entrypoints.cli.main"]

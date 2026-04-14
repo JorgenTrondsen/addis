@@ -31,7 +31,7 @@ git clone -b pp_optimization https://github.com/JorgenTrondsen/sglang.git
 
 Your folder structure must look like this:
 ```text
-person@machine:~/JorgTrond$ ls
+person@machine:~$ ls
 cadis  sglang  vllm
 ```
 
