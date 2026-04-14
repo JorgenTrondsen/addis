@@ -62,3 +62,35 @@ uv venv venv
 source venv/bin/activate
 VLLM_USE_PRECOMPILED=1 uv pip install --prerelease=allow --editable .
 ```
+
+## Usage
+
+### 1. Launching Cadis (Master)
+
+To start the master node, which coordinates network profiling and pipeline calculation:
+
+```bash
+python src/launcher.py master \
+    --num-workers 2 \
+    --model-path /path/to/your/model \
+    --inference-engine sglang \
+    --gpu-memory-utilization 0.8 \
+    --pp-async-batch-depth 2
+```
+
+**Common Arguments:**
+- `--num-workers`: Number of worker nodes to wait for.
+- `--model-path`: Path to the LLM weights.
+- `--inference-engine`: Engine to use (`sglang` or `vllm`).
+- `--gpu-memory-utilization`: Fraction of GPU memory to reserve (default: 0.8).
+- `--pp-async-batch-depth`: Pipeline async batch depth for SGLang (default: 2).
+- `--kv-cache-size`: KV cache memory size (default: 8G).
+- `--overlay-network`: Overlay network type (`tailscale` or `netbird`).
+
+### 2. Launching Cadis (Worker)
+
+On each worker node, join the cluster by pointing to the master's IP:
+
+```bash
+python src/launcher.py worker <MASTER_IP>
+```

@@ -79,8 +79,8 @@ def run_sglang_subprocess(role, args, assigned_rank, nnodes, pp_size, dist_init_
         "--node-rank", str(assigned_rank),
         "--dist-init-addr", dist_init_addr,
         "--pp-size", str(pp_size),
-        "--mem-fraction-static", "0.8",
-        "--pp-async-batch-depth", "2",
+        "--mem-fraction-static", str(args.gpu_memory_utilization) if hasattr(args, "gpu_memory_utilization") else str(args.get("gpu_memory_utilization", 0.8)),
+        "--pp-async-batch-depth", str(args.pp_async_batch-depth) if hasattr(args, "pp_async_batch_depth") else str(args.get("pp_async_batch_depth", 2)),
     ]
 
     if role == 'master':
@@ -172,7 +172,7 @@ def run_vllm_subprocess(role, args, pipeline_order, node_ip, master_ip):
             "--pipeline-parallel-size", str(len(pipeline_order)),
             "--host", "0.0.0.0",
             "--port", "8000",
-            "--gpu-memory-utilization", "0.8",
+            "--gpu-memory-utilization", str(args.gpu_memory_utilization) if hasattr(args, "gpu_memory_utilization") else str(args.get("gpu_memory_utilization", 0.8)),
             "--max-model-len", "2048"
         ]
 
@@ -249,6 +249,8 @@ def master_mode(args):
             "pp_size": pp_size,
             "dist_init_addr": dist_init_addr,
             "model_path": args.model_path,
+            "gpu_memory_utilization": args.gpu_memory_utilization,
+            "pp_async_batch_depth": args.pp_async_batch_depth,
             "inference_engine": args.inference_engine,
             "overlay_network": args.overlay_network,
             "pipeline_order": pipeline_order,
@@ -342,6 +344,8 @@ if __name__ == "__main__":
     master_parser.add_argument("--num-workers", type=int, required=True)
     master_parser.add_argument("--model-path", type=str, required=True)
     master_parser.add_argument("--kv-cache-size", type=str, default="8G")
+    master_parser.add_argument("--gpu-memory-utilization", type=float, default=0.8)
+    master_parser.add_argument("--pp-async-batch-depth", type=int, default=1)
     master_parser.add_argument("--overlay-network", type=str, default="tailscale")
     master_parser.add_argument("--inference-engine", type=str, choices=["sglang", "vllm"], default="sglang")
 
