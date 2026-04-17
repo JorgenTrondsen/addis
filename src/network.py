@@ -187,7 +187,8 @@ def _get_tailscale_latency() -> dict:
     ips = []
 
     for line in result.stdout.splitlines():
-        if "offline" in line.lower():
+        line_lower = line.lower()
+        if "offline" in line_lower:
             continue
         match = ip_pattern.search(line)
         if match:
