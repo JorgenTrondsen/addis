@@ -195,14 +195,17 @@ def _get_tailscale_latency() -> dict:
             ips.append(match.group(0))
 
     ips = list(set(ips))
+    print(f"Tailscale nodes found: {ips}")
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(ping_ip, ip): ip for ip in ips}
         for future in concurrent.futures.as_completed(futures):
             ip, lat = future.result()
             if lat is not None and lat > 0.0:
+                print(f"Measured latency for {ip}: {lat}ms")
                 latency_map[ip] = lat
 
+    print(f"Final Tailscale latency map: {latency_map}")
     return latency_map
 
 
