@@ -12,15 +12,12 @@ def calculate_pipeline(workers_latency_data: list, master_latency_data: dict, ma
     """
     graph = {}
     graph[master_ip] = master_latency_data
-    print(f"Master {master_ip} latency data: {master_latency_data}")
 
     for data in workers_latency_data:
         ip = data["ip"]
         graph[ip] = data["latency"]
-        print(f"Worker {ip} latency data: {data['latency']}")
 
     all_nodes = list(graph.keys())
-    print(f"Constructed latency graph for nodes: {all_nodes}")
 
     if len(all_nodes) <= 1:
         return all_nodes
@@ -43,10 +40,17 @@ def calculate_pipeline(workers_latency_data: list, master_latency_data: dict, ma
         if best_next_node is None:
             best_next_node = remaining_nodes[0]
             print(f"No direct latency found from {last_node}, picking next available: {best_next_node}")
-        else:
-            print(f"Best next node from {last_node} is {best_next_node} with {min_lat}ms")
 
         best_path.append(best_next_node)
         remaining_nodes.remove(best_next_node)
+
+    total_latency = 0.0
+    for i in range(len(best_path) - 1):
+        current_node = best_path[i]
+        next_node = best_path[i+1]
+        if current_node in graph and next_node in graph[current_node]:
+            total_latency += graph[current_node][next_node]
+
+    print(f"Total estimated pipeline latency: {total_latency:.4f} ms")
 
     return best_path

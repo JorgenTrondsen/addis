@@ -87,14 +87,14 @@ def get_overlay_interface(overlay_name):
 
 def ping_ip(ip):
     try:
-        res = subprocess.run(['ping', '-c', '5', '-i', '0.2', '-W', '1', ip], capture_output=True, text=True)
+        res = subprocess.run(['ping', '-c', '5', '-i', '1', '-W', '3', ip], capture_output=True, text=True)
         if res.returncode == 0:
             # We look for the 'min' value in 'min/avg/max/mdev' to bypass initial DERP relay spikes
             match = re.search(r'min/avg/max/mdev = ([\d\.]+)', res.stdout)
             if match:
                 return ip, float(match.group(1))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error pinging {ip}: {e}")
     return ip, None
 
 def _get_zerotier_latency() -> dict:
@@ -105,8 +105,7 @@ def _get_zerotier_latency() -> dict:
 
     try:
         result = subprocess.run(['zerotier-cli', 'listpeers'], capture_output=True, text=True, check=True)
-    except Exception as e:
-        print(f"Error running zerotier-cli listpeers: {e}")
+    except:
         return latency_map
 
     for line in result.stdout.splitlines():
@@ -138,8 +137,7 @@ def _get_netbird_latency() -> dict:
 
     try:
         result = subprocess.run(['netbird', 'status'], capture_output=True, text=True, check=True)
-    except Exception as e:
-        print(f"Error running netbird status: {e}")
+    except:
         return latency_map
 
     ips = []
@@ -178,8 +176,7 @@ def _get_tailscale_latency() -> dict:
 
     try:
         result = subprocess.run(['tailscale', 'status'], capture_output=True, text=True, check=True)
-    except Exception as e:
-        print(f"Error running tailscale status: {e}")
+    except:
         return latency_map
 
     ip_pattern = re.compile(r'\b100\.\d{1,3}\.\d{1,3}\.\d{1,3}\b')
@@ -194,17 +191,14 @@ def _get_tailscale_latency() -> dict:
             ips.append(match.group(0))
 
     ips = list(set(ips))
-    print(f"Tailscale nodes found: {ips}")
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(ping_ip, ip): ip for ip in ips}
         for future in concurrent.futures.as_completed(futures):
             ip, lat = future.result()
             if lat is not None and lat > 0.0:
-                print(f"Measured latency for {ip}: {lat}ms")
                 latency_map[ip] = lat
 
-    print(f"Final Tailscale latency map: {latency_map}")
     return latency_map
 
 
