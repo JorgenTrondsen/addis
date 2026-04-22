@@ -52,15 +52,13 @@ def recvall(sock, n):
         data.extend(packet)
     return data
 
-def run_sglang_subprocess(role, args, assigned_rank, nnodes, pp_size, dist_init_addr):
+def run_sglang_subprocess(role, args, assigned_rank, dist_init_addr):
     """
     Launches an sglang server instance in a subprocess with appropriate environment variables.
     Args:
         role (str): 'master' or 'worker'. Master binds to a public host/port.
         args (Namespace/dict): Configuration arguments for the model and distribution.
         assigned_rank (int): Distributed rank assigned to this node.
-        nnodes (int): Total number of nodes in the pipeline.
-        pp_size (int): Pipeline parallel size.
         dist_init_addr (str): Distributed initialization address (IP:PORT).
     """
     script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'python', 'sglang', 'launch_server.py')
@@ -71,14 +69,15 @@ def run_sglang_subprocess(role, args, assigned_rank, nnodes, pp_size, dist_init_
     else:
         python_exec = sys.executable
 
+    nnodes = str(args.num_workers + 1) if hasattr(args, "num_workers") else str(args.get("nnodes"))
     cmd = [
         python_exec,
         script_path,
         "--model-path", args.model_path if hasattr(args, "model_path") else args.get("model_path"),
-        "--nnodes", str(nnodes),
+        "--nnodes", nnodes,
         "--node-rank", str(assigned_rank),
         "--dist-init-addr", dist_init_addr,
-        "--pp-size", str(pp_size),
+        "--pp-size", nnodes,
         "--mem-fraction-static", str(args.gpu_memory_utilization) if hasattr(args, "gpu_memory_utilization") else str(args.get("gpu_memory_utilization")),
         "--pp-async-batch-depth", str(args.pp_async_batch_depth) if hasattr(args, "pp_async_batch_depth") else str(args.get("pp_async_batch_depth")),
         "--max-running-requests", "32"
@@ -235,29 +234,25 @@ def master_mode(args):
 
     print(f"[Master] Determined pipeline order: {pipeline_order}")
 
-    nnodes = args.num_workers + 1
-    pp_size = nnodes
-
     dist_init_addr = f"{ts_ip}:20000"
 
     for i, conn in enumerate(worker_conns):
         worker_ip = workers_latency_data[i]["ip"]
         rank = pipeline_order.index(worker_ip)
 
-        assign_msg = {
+        args_msg = {
             "node_rank": rank,
-            "nnodes": nnodes,
-            "pp_size": pp_size,
+            "nnodes": args.num_workers + 1,
+            "pp_size": args.num_workers + 1,
             "dist_init_addr": dist_init_addr,
             "model_path": args.model_path,
-            "gpu_memory_utilization": args.gpu_memory_utilization,
             "pp_async_batch_depth": args.pp_async_batch_depth,
             "inference_engine": args.inference_engine,
             "overlay_network": args.overlay_network,
             "pipeline_order": pipeline_order,
             "master_ip": ts_ip
         }
-        send_msg(conn, assign_msg)
+        send_msg(conn, args_msg)
         conn.close()
 
     master_rank = pipeline_order.index(ts_ip)
@@ -265,7 +260,7 @@ def master_mode(args):
     if args.inference_engine == "vllm":
         run_vllm_subprocess('master', vars(args), pipeline_order, ts_ip, ts_ip)
     else:
-        run_sglang_subprocess('master', args, master_rank, nnodes, pp_size, dist_init_addr)
+        run_sglang_subprocess('master', args, master_rank, dist_init_addr)
     server_sock.close()
 
 
@@ -310,29 +305,27 @@ def worker_mode(args):
     }
 
     send_msg(sock, resp_msg)
-    print("[Worker] Sent latency map. Waiting for assignment...")
-
-    assign_msg = recv_msg(sock)
-    print(f"[Worker] Received assignment: {assign_msg}")
+    args_msg = recv_msg(sock)
+    print(f"[Worker] Received arguments: {args_msg}")
     sock.close()
 
-    inference_engine = assign_msg.get("inference_engine", "sglang")
+    args_msg["gpu_memory_utilization"] = args.gpu_memory_utilization
+
+    inference_engine = args_msg.get("inference_engine", "sglang")
     if inference_engine == "vllm":
         run_vllm_subprocess(
             'worker',
-            assign_msg,
-            assign_msg["pipeline_order"],
+            args_msg,
+            args_msg["pipeline_order"],
             ts_ip,
-            assign_msg["master_ip"]
+            args_msg["master_ip"]
         )
     else:
         run_sglang_subprocess(
             'worker',
-            assign_msg,
-            assign_msg["node_rank"],
-            assign_msg["nnodes"],
-            assign_msg["pp_size"],
-            assign_msg["dist_init_addr"]
+            args_msg,
+            args_msg["node_rank"],
+            args_msg["dist_init_addr"]
         )
 
 
@@ -352,7 +345,8 @@ if __name__ == "__main__":
 
     # Worker
     worker_parser = subparsers.add_parser("worker")
-    worker_parser.add_argument("master_ip", type=str)
+    worker_parser.add_argument("--master_ip", type=str)
+    worker_parser.add_argument("--gpu-memory-utilization", type=float, default=0.8)
 
     args = parser.parse_args()
 
