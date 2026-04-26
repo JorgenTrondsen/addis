@@ -3,3 +3,7 @@ __pycache__/
 
 # VS Code
 .vscode/
+
+# Virtual environment
+venv/
+

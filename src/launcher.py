@@ -7,7 +7,7 @@ import sys
 import os
 
 from network import get_network_latency, get_node_ip, get_overlay_interface
-from pipeline import calculate_pipeline
+from pipeline import calculate_partitions, calculate_pipeline, calculate_usage
 
 def send_msg(sock, msg_dict):
     """
@@ -52,7 +52,7 @@ def recvall(sock, n):
         data.extend(packet)
     return data
 
-def run_sglang_subprocess(role, args, assigned_rank, dist_init_addr):
+def run_sglang_subprocess(role, args, assigned_rank, dist_init_addr, partitions_list):
     """
     Launches an sglang server instance in a subprocess with appropriate environment variables.
     Args:
@@ -60,6 +60,7 @@ def run_sglang_subprocess(role, args, assigned_rank, dist_init_addr):
         args (Namespace/dict): Configuration arguments for the model and distribution.
         assigned_rank (int): Distributed rank assigned to this node.
         dist_init_addr (str): Distributed initialization address (IP:PORT).
+        partitions_list (list): List of partition sizes sorted by rank..
     """
     script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'python', 'sglang', 'launch_server.py')
     venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'venv', 'bin', 'python')
@@ -94,6 +95,7 @@ def run_sglang_subprocess(role, args, assigned_rank, dist_init_addr):
     ifName = get_overlay_interface(overlay_network)
     env["NCCL_SOCKET_IFNAME"] = ifName
     env["GLOO_SOCKET_IFNAME"] = ifName
+    env["SGLANG_PP_LAYER_PARTITION"] = ",".join(partitions_list)
 
     venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'sglang', 'venv', 'bin')
     if os.path.exists(venv_bin):
@@ -104,7 +106,7 @@ def run_sglang_subprocess(role, args, assigned_rank, dist_init_addr):
 
     subprocess.run(cmd, env=env)
 
-def run_vllm_subprocess(role, args, pipeline_order, node_ip, master_ip):
+def run_vllm_subprocess(role, args, pipeline_order, node_ip, master_ip, partitions_list):
     """
     Launches a vLLM instance using Ray for distributed execution.
     Args:
@@ -113,6 +115,7 @@ def run_vllm_subprocess(role, args, pipeline_order, node_ip, master_ip):
         pipeline_order (list): List of IP addresses defining the pipeline rank order.
         node_ip (str): IP address of the current node.
         master_ip (str): IP address of the Ray head node.
+        partitions_list (list): List of partition sizes sorted by rank.
     """
     env = os.environ.copy()
 
@@ -121,6 +124,8 @@ def run_vllm_subprocess(role, args, pipeline_order, node_ip, master_ip):
     env["NCCL_SOCKET_IFNAME"] = ifName
     env["GLOO_SOCKET_IFNAME"] = ifName
     env["VLLM_HOST_IP"] = node_ip
+    env["VLLM_PP_LAYER_PARTITION"] = ",".join(partitions_list)
+    env["VLLM_PP_RANK_ORDER"] = ",".join(pipeline_order)
 
     venv_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'vllm', 'venv', 'bin')
     venv_py = os.path.join(venv_bin, 'python')
@@ -165,7 +170,6 @@ def run_vllm_subprocess(role, args, pipeline_order, node_ip, master_ip):
         print(f"[{role}] Waiting for ray workers to connect...")
         time.sleep(5)
 
-        env["VLLM_PP_RANK_ORDER"] = ",".join(pipeline_order)
         vllm_cmd = vllm_cmd_base + [
             "serve", args.get("model_path"),
             "--distributed-executor-backend", "ray",
@@ -200,44 +204,41 @@ def master_mode(args):
     print(f"[Master] Listening for {args.num_workers} workers on port {PORT}...")
 
     worker_conns = []
-    worker_addrs = []
 
     for i in range(args.num_workers):
         conn, addr = server_sock.accept()
         print(f"[Master] Accepted connection from {addr}")
         worker_conns.append(conn)
-        worker_addrs.append(addr[0])
 
     config_msg = {"overlay_network": args.overlay_network, "inference_engine": args.inference_engine}
     for conn in worker_conns:
         send_msg(conn, config_msg)
 
-    print("[Master] Sent overlay network config to workers. Waiting for latency maps...")
+    print("[Master] Sent overlay network config to workers. Waiting for worker data...")
 
-    print("[Master] Profiling my own latencies...")
     master_latency_data = get_network_latency(args.overlay_network)
-
-    workers_latency_data = []
+    workers_data = []
 
     for conn in worker_conns:
-        print("waiting for worker latency data...")
         resp = recv_msg(conn)
-        if resp and "latency" in resp and "ip" in resp:
-            workers_latency_data.append(resp)
-            print(f"[Master] Received latency map from worker {resp['ip']}")
+        if resp and "latency" in resp and "ip" in resp and "vram" in resp:
+            workers_data.append(resp)
+            print(f"[Master] Received data from worker {resp['ip']}")
 
     print("[Master] All worker data received. Calculating pipeline...")
 
     ts_ip = get_node_ip(args.overlay_network)
 
-    pipeline_order = calculate_pipeline(workers_latency_data, master_latency_data, ts_ip)
+    master_vram = calculate_usage(args.gpu_memory_utilization)
 
-    print(f"[Master] Determined pipeline order: {pipeline_order}")
+    pipeline_order = calculate_pipeline(workers_data, master_latency_data, ts_ip)
+    nodes_data = workers_data + [{"ip": ts_ip, "vram": master_vram}]
+    partitions_list = calculate_partitions(nodes_data, pipeline_order, args.model_path)
 
     dist_init_addr = f"{ts_ip}:20000"
 
     for i, conn in enumerate(worker_conns):
-        worker_ip = workers_latency_data[i]["ip"]
+        worker_ip = workers_data[i]["ip"]
         rank = pipeline_order.index(worker_ip)
 
         args_msg = {
@@ -250,7 +251,8 @@ def master_mode(args):
             "inference_engine": args.inference_engine,
             "overlay_network": args.overlay_network,
             "pipeline_order": pipeline_order,
-            "master_ip": ts_ip
+            "master_ip": ts_ip,
+            "partitions_list": partitions_list
         }
         send_msg(conn, args_msg)
         conn.close()
@@ -258,9 +260,9 @@ def master_mode(args):
     master_rank = pipeline_order.index(ts_ip)
     print(f"[Master] Starting master node with rank {master_rank}")
     if args.inference_engine == "vllm":
-        run_vllm_subprocess('master', vars(args), pipeline_order, ts_ip, ts_ip)
+        run_vllm_subprocess('master', vars(args), pipeline_order, ts_ip, ts_ip, partitions_list)
     else:
-        run_sglang_subprocess('master', args, master_rank, dist_init_addr)
+        run_sglang_subprocess('master', args, master_rank, dist_init_addr, partitions_list)
     server_sock.close()
 
 
@@ -297,11 +299,15 @@ def worker_mode(args):
     print(f"[Worker] Profiling network using {overlay_network}...")
     latency_map = get_network_latency(overlay_network)
 
+    print(f"[Worker] Calculating GPU memory usage...")
+    vram_usage = calculate_usage(args.gpu_memory_utilization)
+
     ts_ip = get_node_ip(overlay_network)
 
     resp_msg = {
         "ip": ts_ip,
-        "latency": latency_map
+        "latency": latency_map,
+        "vram": vram_usage
     }
 
     send_msg(sock, resp_msg)
@@ -318,14 +324,16 @@ def worker_mode(args):
             args_msg,
             args_msg["pipeline_order"],
             ts_ip,
-            args_msg["master_ip"]
+            args_msg["master_ip"],
+            args_msg["partitions_list"]
         )
     else:
         run_sglang_subprocess(
             'worker',
             args_msg,
             args_msg["node_rank"],
-            args_msg["dist_init_addr"]
+            args_msg["dist_init_addr"],
+            args_msg["partitions_list"]
         )
 
 

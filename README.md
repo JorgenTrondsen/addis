@@ -65,6 +65,14 @@ VLLM_USE_PRECOMPILED=1 uv pip install --prerelease=allow --editable .
 
 ## Usage
 
+### Environment Setup
+```bash
+cd addis
+uv venv venv
+source venv/bin/activate
+uv pip install huggingface-hub transformers
+```
+
 ### 1. Launching ADDIS (Master)
 
 To start the master node, which coordinates network profiling and pipeline calculation:
