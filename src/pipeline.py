@@ -1,5 +1,4 @@
 import subprocess
-from huggingface_hub import model_info
 from transformers import AutoConfig
 
 def calculate_pipeline(workers_latency_data: list, master_latency_data: dict, master_ip: str) -> list:
@@ -61,42 +60,35 @@ def calculate_pipeline(workers_latency_data: list, master_latency_data: dict, ma
     return best_path
 
 
-def get_hf_model_info(model_path: str) -> tuple[float, int]:
+def get_model_info(model_path: str) -> int:
     """
-    Fetches model size and layer count for a remote Hugging Face model.
+    Fetches model layer count for a remote Hugging Face model.
     Returns:
-        tuple: (model_size_gb, num_layers)
+        int: num_layers
     """
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     num_layers = getattr(config, "num_hidden_layers", 0)
     if num_layers == 0:
         num_layers = getattr(config, "n_layer", 0)
 
-    info = model_info(model_path)
-    total_size_bytes = info.used_storage
-
-    model_size_gb = (total_size_bytes / (1000**3))
-
-    return model_size_gb, num_layers
+    return num_layers
 
 
 def calculate_partitions(nodes_data: list, pipeline_order: list, model_path: str) -> list:
     """
     Determines how many layers each rank in the pipeline should process.
     """
-    model_size, model_layers = get_hf_model_info(model_path)
+    model_layers = get_model_info(model_path)
     node_map = {n["ip"]: n for n in nodes_data}
 
     total_vram = sum(node_map[ip]["vram"] for ip in pipeline_order)
-    remaining_vram_buffer = (total_vram - model_size) / len(pipeline_order)
 
     partitions_list = []
     for ip in pipeline_order:
         node_memory = node_map[ip]["vram"]
-
-        node_model_fraction = (node_memory - remaining_vram_buffer) / model_size
+        node_model_fraction = node_memory / total_vram
         node_layers = int(node_model_fraction * model_layers)
-        partitions_list.append(max(0, node_layers))
+        partitions_list.append(node_layers)
 
     total_allocated = sum(partitions_list)
     remainder = model_layers - total_allocated
