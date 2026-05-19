@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 
 # Data
-latencies = [40, 80, 160]
-addis_throughput = [14.54, 9.27, 5.37]
-parallax_throughput = [9.46, 6.26, 4.13]
-sglang_throughput = [2.70, 1.45, 0.76]
-vllm_throughput = [10.73, 6.1, 3.1]
+latencies = [40, 80, 120, 160]
+addis_throughput = [14.54, 9.27, 6.79, 5.37]
+parallax_throughput = [9.46, 6.26, 4.87, 4.13]
+sglang_throughput = [2.70, 1.45, 1.0, 0.76]
+vllm_throughput = [10.73, 6.1, 4.10, 3.1]
 
 plt.figure(figsize=(9, 6))
 

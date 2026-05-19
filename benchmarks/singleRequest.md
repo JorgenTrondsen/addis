@@ -28,6 +28,20 @@ gen throughput (token/s): 1.45
 ### vLLM
 Output token throughput (tok/s): 6.1
 
+## Latency: 120ms
+
+### ADDIS
+gen throughput (token/s): 6.79
+
+### Parallax
+Output token throughput (tok/s): 4.87
+
+### sglang
+gen throughput (token/s): 1.0
+
+### vLLM
+Output token throughput (tok/s): 4.10
+
 ## Latency: 160ms
 
 ### ADDIS
