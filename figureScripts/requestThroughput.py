@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import MultipleLocator
 
 models = ["Qwen3-8B", "Qwen3-14B"]
 datasets = ["ShareGPT", "WildGPT"]
@@ -27,11 +28,11 @@ addis_throughput = {
     }
 }
 
-fig, axes = plt.subplots(len(models), len(datasets), figsize=(18, 14), sharey=False)
+fig, axes = plt.subplots(len(models), len(datasets), figsize=(18, 14), sharey='row')
 
 x = np.arange(len(req_rates))
 width = 0.35
-x_offset = 0.2  # Increase this value to move labels further left
+x_offset = 0.23
 
 for i, model in enumerate(models):
     for j, dataset in enumerate(datasets):
@@ -47,39 +48,40 @@ for i, model in enumerate(models):
         for k in range(len(req_rates)):
             p_val = p_vals[k]
             c_val = c_vals[k]
-
             percent_decrease = ((c_val - p_val) / c_val) * 100
 
             ax.text(x[k] - width/2 - x_offset, p_val + (max(c_vals)*0.02),
                     f"↓{percent_decrease:.0f}%",
-                    ha='center', va='bottom', color='black', fontsize=28)
+                    ha='center', va='bottom', color='black', fontsize=38)
 
-        ax.set_xlim(-0.8, len(req_rates) - 0.2)
+        ax.set_xlim(-0.75, len(req_rates) - 0.6)
 
-        ax.set_xticks(x)
-        ax.set_xticklabels([])
-
-        if i == 0:
-            ax.set_title(f"{dataset}", fontsize=30, pad=20)
+        ax.yaxis.set_major_locator(MultipleLocator(0.25))
 
         if j == 0:
-            ax.set_ylabel("Throughput (req/s)", fontsize=28)
-
-        if j == len(datasets) - 1:
-            ax.yaxis.set_label_position("right")
-            ax.set_ylabel(f"{model}", rotation=90, fontsize=30)
+            ax.set_ylabel("Throughput (req/s)", fontsize=38)
+            ax.tick_params(axis='y', labelsize=38)
+        else:
+            ax.tick_params(axis='y', left=False, labelleft=False)
 
         if i == len(models) - 1:
             ax.set_xticks(x)
-            ax.set_xticklabels([f"Rate={r}" for r in req_rates], fontsize=28)
+            ax.set_xticklabels([f"{r}" for r in req_rates], fontsize=38)
+            ax.set_xlabel("Request Rate", fontsize=38)
+        else:
+            ax.set_xticks(x)
+            ax.set_xticklabels([])
 
+        if i == 0:
+            ax.set_title(f"{dataset}", fontsize=38, pad=20)
 
-        ax.tick_params(axis='y', labelsize=28)
+        if j == len(datasets) - 1:
+            ax.yaxis.set_label_position("right")
+            ax.set_ylabel(f"{model}", rotation=270, fontsize=38, labelpad=40)
 
-fig.legend([rects1, rects2], ["Parallax", "ADDIS"], loc='upper center', bbox_to_anchor=(0.5, 0.98), ncol=2, fontsize=28)
+fig.legend([rects1, rects2], ["Parallax", "ADDIS"], loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=2, fontsize=38)
 
-# Adjust layout: 'left' parameter in rect ensures the whole subplot block shifts right
-plt.tight_layout(rect=[0.05, 0.03, 0.95, 0.9], h_pad=5.0, w_pad=4.0)
+plt.tight_layout(rect=[0.05, 0.03, 0.95, 0.92], h_pad=5.0, w_pad=2.0)
 
 plt.savefig("request_throughput.png", bbox_inches='tight')
 print("Saved request_throughput.png")

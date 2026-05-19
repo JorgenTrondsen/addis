@@ -88,7 +88,7 @@ for model in models:
                 ax.set_title(f"{dataset}", fontsize=28, pad=18)
             if j == len(datasets) - 1:
                 ax.yaxis.set_label_position("right")
-                ax.set_ylabel(f"req-rate = {rate}", rotation=90, fontsize=30)
+                ax.set_ylabel(f"request rate = {rate}", rotation=270, fontsize=30, labelpad=34)
             if j == 0:
                 ax.set_ylabel("Latency (s)", fontsize=28)
             if i == len(req_rates) - 1:
